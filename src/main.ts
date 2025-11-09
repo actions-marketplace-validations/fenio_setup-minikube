@@ -69,6 +69,47 @@ async function installPrerequisites(): Promise<void> {
       core.info('  ✓ conntrack already installed');
     }
     
+    // Install crictl (required by Minikube for CRI operations)
+    core.info('  Installing crictl...');
+    const checkCrictl = await exec.exec('which', ['crictl'], { 
+      ignoreReturnCode: true,
+      silent: true 
+    });
+    
+    if (checkCrictl !== 0) {
+      core.info('  crictl not found, installing...');
+      const crictlVersion = 'v1.31.1';
+      const archOutput: string[] = [];
+      await exec.exec('uname', ['-m'], {
+        listeners: {
+          stdout: (data: Buffer) => archOutput.push(data.toString())
+        }
+      });
+      const arch = archOutput.join('').trim();
+      
+      // Map architecture
+      let binaryArch: string;
+      if (arch === 'x86_64') {
+        binaryArch = 'amd64';
+      } else if (arch === 'aarch64' || arch === 'arm64') {
+        binaryArch = 'arm64';
+      } else {
+        throw new Error(`Unsupported architecture for crictl: ${arch}`);
+      }
+      
+      const crictlUrl = `https://github.com/kubernetes-sigs/cri-tools/releases/download/${crictlVersion}/crictl-${crictlVersion}-linux-${binaryArch}.tar.gz`;
+      core.info(`  Downloading crictl from: ${crictlUrl}`);
+      
+      await exec.exec('curl', ['-sfL', crictlUrl, '-o', '/tmp/crictl.tar.gz']);
+      await exec.exec('sudo', ['tar', 'zxvf', '/tmp/crictl.tar.gz', '-C', '/usr/local/bin']);
+      await exec.exec('rm', ['-f', '/tmp/crictl.tar.gz']);
+      await exec.exec('sudo', ['chmod', '+x', '/usr/local/bin/crictl']);
+      
+      core.info('  ✓ crictl installed');
+    } else {
+      core.info('  ✓ crictl already installed');
+    }
+    
     core.info('✓ Prerequisites installed successfully');
   } catch (error) {
     throw new Error(`Failed to install prerequisites: ${error}`);
