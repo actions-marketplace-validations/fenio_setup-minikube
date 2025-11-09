@@ -1,0 +1,42 @@
+name: 'Setup minikube'
+description: 'Install and configure minikube - Local Kubernetes for CI/CD'
+author: 'fenio'
+
+branding:
+  icon: 'box'
+  color: 'blue'
+
+inputs:
+  version:
+    description: 'minikube version to install (e.g., v1.32.0, latest, or stable)'
+    required: false
+    default: 'stable'
+  
+  kubernetes-version:
+    description: 'Kubernetes version to use (e.g., v1.28.3, stable, latest)'
+    required: false
+    default: 'stable'
+  
+  driver:
+    description: 'Driver to use (docker, none, podman)'
+    required: false
+    default: 'docker'
+  
+  wait-for-ready:
+    description: 'Wait for minikube cluster to be ready before completing'
+    required: false
+    default: 'true'
+  
+  timeout:
+    description: 'Timeout in seconds to wait for cluster readiness'
+    required: false
+    default: '300'
+
+outputs:
+  kubeconfig:
+    description: 'Path to the kubeconfig file'
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
+  post: 'dist/index.js'
