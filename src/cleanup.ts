@@ -22,16 +22,16 @@ export async function cleanup(): Promise<void> {
 async function deleteMinikube(): Promise<void> {
   core.info('Deleting Minikube cluster...');
   
-  // Check if minikube is installed
-  const isInstalled = await exec.exec('which', ['minikube'], { 
-    ignoreReturnCode: true,
-    silent: true 
-  });
+  // Retrieve custom minikube path from state
+  const minikubePath = core.getState('minikubePath');
+  const customBinDir = core.getState('customBinDir');
   
-  if (isInstalled !== 0) {
-    core.info('  Minikube not installed, skipping cleanup');
+  if (!minikubePath) {
+    core.info('  No custom minikube installation found, skipping cleanup');
     return;
   }
+  
+  core.info(`  Custom minikube path: ${minikubePath}`);
   
   // Check if minikube cluster exists
   const statusResult = await exec.exec('minikube', ['status'], { 
@@ -47,8 +47,24 @@ async function deleteMinikube(): Promise<void> {
     core.info('  No Minikube cluster found');
   }
   
-  // Remove minikube binary to fully restore system state
-  core.info('  Removing minikube binary...');
-  await exec.exec('sudo', ['rm', '-f', '/usr/local/bin/minikube'], { ignoreReturnCode: true });
-  core.info('  Minikube binary removed');
+  // Remove custom minikube binary to fully restore system state
+  core.info(`  Removing custom minikube binary: ${minikubePath}`);
+  await exec.exec('rm', ['-f', minikubePath], { ignoreReturnCode: true });
+  core.info('  Custom minikube binary removed');
+  
+  // Remove custom bin directory if it's empty
+  if (customBinDir) {
+    core.info(`  Checking if custom bin directory is empty: ${customBinDir}`);
+    const checkEmpty = await exec.exec('bash', ['-c', `[ -d "${customBinDir}" ] && [ -z "$(ls -A "${customBinDir}")" ]`], { 
+      ignoreReturnCode: true,
+      silent: true 
+    });
+    
+    if (checkEmpty === 0) {
+      core.info(`  Removing empty custom bin directory: ${customBinDir}`);
+      await exec.exec('rmdir', [customBinDir], { ignoreReturnCode: true });
+    } else {
+      core.info(`  Custom bin directory not empty or doesn't exist, leaving it`);
+    }
+  }
 }

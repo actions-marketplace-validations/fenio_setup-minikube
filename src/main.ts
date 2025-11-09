@@ -99,16 +99,50 @@ async function installMinikube(version: string): Promise<void> {
     const tmpBinary = '/tmp/minikube';
     await exec.exec('curl', ['-sfL', downloadUrl, '-o', tmpBinary]);
     
-    // Install binary
-    core.info('  Installing binary to /usr/local/bin/minikube...');
-    await exec.exec('sudo', ['install', tmpBinary, '/usr/local/bin/minikube']);
+    // Install binary to custom location under our control
+    const homeDir = os.homedir();
+    const customBinDir = path.join(homeDir, '.local', 'bin');
+    const minikubePath = path.join(customBinDir, 'minikube');
     
-    // Clean up
+    // Create directory if it doesn't exist
+    core.info(`  Creating custom bin directory: ${customBinDir}`);
+    await fs.mkdir(customBinDir, { recursive: true });
+    
+    // Install binary to custom location
+    core.info(`  Installing binary to ${minikubePath}...`);
+    await exec.exec('install', ['-m', '755', tmpBinary, minikubePath]);
+    
+    // Add custom bin directory to PATH (prepend to ensure it takes priority)
+    const currentPath = process.env.PATH || '';
+    const newPath = `${customBinDir}:${currentPath}`;
+    core.exportVariable('PATH', newPath);
+    core.addPath(customBinDir);
+    core.info(`  Added ${customBinDir} to PATH`);
+    
+    // Save custom paths for cleanup
+    core.saveState('minikubePath', minikubePath);
+    core.saveState('customBinDir', customBinDir);
+    
+    // Clean up temp file
     await exec.exec('rm', ['-f', tmpBinary]);
     
     // Verify installation
     core.info('  Verifying installation...');
     await exec.exec('minikube', ['version']);
+    
+    // Double-check we're using our custom binary
+    const whichOutput: string[] = [];
+    await exec.exec('which', ['minikube'], {
+      listeners: {
+        stdout: (data: Buffer) => whichOutput.push(data.toString())
+      }
+    });
+    const actualPath = whichOutput.join('').trim();
+    core.info(`  Using minikube from: ${actualPath}`);
+    
+    if (actualPath !== minikubePath) {
+      core.warning(`Expected to use ${minikubePath} but found ${actualPath}`);
+    }
     
     core.info('✓ Minikube installed successfully');
   } catch (error) {

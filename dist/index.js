@@ -25703,15 +25703,14 @@ async function cleanup() {
 }
 async function deleteMinikube() {
     core.info('Deleting Minikube cluster...');
-    // Check if minikube is installed
-    const isInstalled = await exec.exec('which', ['minikube'], {
-        ignoreReturnCode: true,
-        silent: true
-    });
-    if (isInstalled !== 0) {
-        core.info('  Minikube not installed, skipping cleanup');
+    // Retrieve custom minikube path from state
+    const minikubePath = core.getState('minikubePath');
+    const customBinDir = core.getState('customBinDir');
+    if (!minikubePath) {
+        core.info('  No custom minikube installation found, skipping cleanup');
         return;
     }
+    core.info(`  Custom minikube path: ${minikubePath}`);
     // Check if minikube cluster exists
     const statusResult = await exec.exec('minikube', ['status'], {
         ignoreReturnCode: true,
@@ -25725,10 +25724,25 @@ async function deleteMinikube() {
     else {
         core.info('  No Minikube cluster found');
     }
-    // Remove minikube binary to fully restore system state
-    core.info('  Removing minikube binary...');
-    await exec.exec('sudo', ['rm', '-f', '/usr/local/bin/minikube'], { ignoreReturnCode: true });
-    core.info('  Minikube binary removed');
+    // Remove custom minikube binary to fully restore system state
+    core.info(`  Removing custom minikube binary: ${minikubePath}`);
+    await exec.exec('rm', ['-f', minikubePath], { ignoreReturnCode: true });
+    core.info('  Custom minikube binary removed');
+    // Remove custom bin directory if it's empty
+    if (customBinDir) {
+        core.info(`  Checking if custom bin directory is empty: ${customBinDir}`);
+        const checkEmpty = await exec.exec('bash', ['-c', `[ -d "${customBinDir}" ] && [ -z "$(ls -A "${customBinDir}")" ]`], {
+            ignoreReturnCode: true,
+            silent: true
+        });
+        if (checkEmpty === 0) {
+            core.info(`  Removing empty custom bin directory: ${customBinDir}`);
+            await exec.exec('rmdir', [customBinDir], { ignoreReturnCode: true });
+        }
+        else {
+            core.info(`  Custom bin directory not empty or doesn't exist, leaving it`);
+        }
+    }
 }
 
 
@@ -25837,6 +25851,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.main = main;
 const core = __importStar(__nccwpck_require__(7484));
 const exec = __importStar(__nccwpck_require__(5236));
+const fs_1 = __nccwpck_require__(9896);
 const os = __importStar(__nccwpck_require__(857));
 const path = __importStar(__nccwpck_require__(6928));
 async function main() {
@@ -25919,14 +25934,42 @@ async function installMinikube(version) {
         // Download binary
         const tmpBinary = '/tmp/minikube';
         await exec.exec('curl', ['-sfL', downloadUrl, '-o', tmpBinary]);
-        // Install binary
-        core.info('  Installing binary to /usr/local/bin/minikube...');
-        await exec.exec('sudo', ['install', tmpBinary, '/usr/local/bin/minikube']);
-        // Clean up
+        // Install binary to custom location under our control
+        const homeDir = os.homedir();
+        const customBinDir = path.join(homeDir, '.local', 'bin');
+        const minikubePath = path.join(customBinDir, 'minikube');
+        // Create directory if it doesn't exist
+        core.info(`  Creating custom bin directory: ${customBinDir}`);
+        await fs_1.promises.mkdir(customBinDir, { recursive: true });
+        // Install binary to custom location
+        core.info(`  Installing binary to ${minikubePath}...`);
+        await exec.exec('install', ['-m', '755', tmpBinary, minikubePath]);
+        // Add custom bin directory to PATH (prepend to ensure it takes priority)
+        const currentPath = process.env.PATH || '';
+        const newPath = `${customBinDir}:${currentPath}`;
+        core.exportVariable('PATH', newPath);
+        core.addPath(customBinDir);
+        core.info(`  Added ${customBinDir} to PATH`);
+        // Save custom paths for cleanup
+        core.saveState('minikubePath', minikubePath);
+        core.saveState('customBinDir', customBinDir);
+        // Clean up temp file
         await exec.exec('rm', ['-f', tmpBinary]);
         // Verify installation
         core.info('  Verifying installation...');
         await exec.exec('minikube', ['version']);
+        // Double-check we're using our custom binary
+        const whichOutput = [];
+        await exec.exec('which', ['minikube'], {
+            listeners: {
+                stdout: (data) => whichOutput.push(data.toString())
+            }
+        });
+        const actualPath = whichOutput.join('').trim();
+        core.info(`  Using minikube from: ${actualPath}`);
+        if (actualPath !== minikubePath) {
+            core.warning(`Expected to use ${minikubePath} but found ${actualPath}`);
+        }
         core.info('✓ Minikube installed successfully');
     }
     catch (error) {
