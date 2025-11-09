@@ -16,10 +16,11 @@ Every operation in the setup phase has a corresponding cleanup operation:
 
 | Setup Operation | Cleanup Operation | Location |
 |----------------|-------------------|----------|
-| Install minikube binary (`/usr/local/bin/minikube`) | Binary explicitly removed with `rm -f` | `src/cleanup.ts:~51` |
+| Install minikube binary (`~/.local/bin/minikube`) | Binary explicitly removed with `rm -f` | `src/cleanup.ts:58` |
 | Start minikube cluster | Cluster deleted by `minikube delete` | `src/cleanup.ts:44` |
 | Create kubeconfig in `~/.kube/config` | Left in place (user home directory) | N/A |
 | Create minikube profile directory (`~/.minikube`) | Removed by `minikube delete` | `src/cleanup.ts:44` |
+| CNI directories (`/etc/cni`, `/opt/cni`) | Removed with `sudo rm -rf` | `src/cleanup.ts:52-53` |
 | Set KUBECONFIG environment variable | No cleanup needed - job-scoped only | N/A |
 
 ### Cleanup Guarantees

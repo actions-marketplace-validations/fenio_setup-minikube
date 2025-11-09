@@ -25724,6 +25724,11 @@ async function deleteMinikube() {
     else {
         core.info('  No Minikube cluster found');
     }
+    // Remove CNI directories created by minikube
+    core.info('  Removing CNI directories...');
+    await exec.exec('sudo', ['rm', '-rf', '/etc/cni'], { ignoreReturnCode: true });
+    await exec.exec('sudo', ['rm', '-rf', '/opt/cni'], { ignoreReturnCode: true });
+    core.info('  CNI directories removed');
     // Remove custom minikube binary to fully restore system state
     core.info(`  Removing custom minikube binary: ${minikubePath}`);
     await exec.exec('rm', ['-f', minikubePath], { ignoreReturnCode: true });
