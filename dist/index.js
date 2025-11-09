@@ -25686,12 +25686,12 @@ exports.cleanup = cleanup;
 const core = __importStar(__nccwpck_require__(7484));
 const exec = __importStar(__nccwpck_require__(5236));
 async function cleanup() {
-    core.startGroup('Cleaning up Minikube');
+    core.startGroup('Cleaning up and restoring system state');
     try {
         core.info('Starting cleanup...');
         // Stop and delete Minikube cluster
         await deleteMinikube();
-        core.info('✓ Minikube cleanup complete');
+        core.info('✓ System state restored');
     }
     catch (error) {
         core.warning(`Cleanup encountered errors: ${error}`);
