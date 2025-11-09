@@ -25929,7 +25929,7 @@ async function installMinikube(version) {
         core.info(`  Platform: ${osPlatform}, Architecture: ${binaryArch}`);
         // Construct download URL
         let downloadUrl;
-        if (version === 'latest') {
+        if (version === 'latest' || version === 'stable') {
             downloadUrl = `https://storage.googleapis.com/minikube/releases/latest/minikube-${osPlatform}-${binaryArch}`;
         }
         else {

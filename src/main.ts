@@ -87,7 +87,7 @@ async function installMinikube(version: string): Promise<void> {
     
     // Construct download URL
     let downloadUrl: string;
-    if (version === 'latest') {
+    if (version === 'latest' || version === 'stable') {
       downloadUrl = `https://storage.googleapis.com/minikube/releases/latest/minikube-${osPlatform}-${binaryArch}`;
     } else {
       downloadUrl = `https://github.com/kubernetes/minikube/releases/download/${version}/minikube-${osPlatform}-${binaryArch}`;
