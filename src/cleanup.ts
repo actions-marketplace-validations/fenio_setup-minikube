@@ -46,4 +46,9 @@ async function deleteMinikube(): Promise<void> {
   } else {
     core.info('  No Minikube cluster found');
   }
+  
+  // Remove minikube binary to fully restore system state
+  core.info('  Removing minikube binary...');
+  await exec.exec('sudo', ['rm', '-f', '/usr/local/bin/minikube'], { ignoreReturnCode: true });
+  core.info('  Minikube binary removed');
 }
