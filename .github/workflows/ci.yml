@@ -47,7 +47,13 @@ jobs:
       - name: Check initial state
         run: |
           echo "=== Checking Initial System State ==="
-          ! which minikube && echo "✓ minikube not installed initially" || (echo "✗ minikube already installed" && exit 1)
+          # Note: ubuntu-latest comes with minikube pre-installed at /usr/local/bin/minikube
+          # Our action installs to ~/.local/bin/minikube which takes priority via PATH
+          if [ -f ~/.local/bin/minikube ]; then
+            echo "✗ Custom minikube already exists at ~/.local/bin/minikube"
+            exit 1
+          fi
+          echo "✓ No custom minikube binary in ~/.local/bin"
           docker ps && echo "✓ Docker is working" || (echo "✗ Docker not working" && exit 1)
           
       - name: Setup Minikube
@@ -128,13 +134,13 @@ jobs:
         run: |
           echo "=== Verifying Previous Cleanup Was Complete ==="
           
-          # minikube binary should be removed
-          if which minikube >/dev/null 2>&1; then
-            echo "✗ CRITICAL FAILURE: minikube binary still exists at $(which minikube)"
+          # Custom minikube binary should be removed
+          if [ -f ~/.local/bin/minikube ]; then
+            echo "✗ CRITICAL FAILURE: Custom minikube binary still exists at ~/.local/bin/minikube"
             echo "This means the previous job's cleanup did NOT remove the binary!"
             exit 1
           fi
-          echo "✓ minikube binary removed"
+          echo "✓ Custom minikube binary removed"
           
           # minikube profile should not exist
           if [ -d ~/.minikube ]; then
@@ -214,11 +220,11 @@ jobs:
           # Verify no minikube artifacts
           echo ""
           echo "=== Verifying No Minikube Artifacts ==="
-          if which minikube >/dev/null 2>&1; then
-            echo "✗ FAIL: minikube binary still exists"
+          if [ -f ~/.local/bin/minikube ]; then
+            echo "✗ FAIL: Custom minikube binary still exists at ~/.local/bin/minikube"
             exit 1
           fi
-          echo "✓ No minikube binary"
+          echo "✓ No custom minikube binary"
           
           if [ -d ~/.minikube ]; then
             echo "✗ FAIL: ~/.minikube still exists"
