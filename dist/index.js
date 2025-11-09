@@ -25871,6 +25871,8 @@ async function main() {
         const waitForReady = core.getInput('wait-for-ready') === 'true';
         const timeout = parseInt(core.getInput('timeout') || '300', 10);
         core.info(`Configuration: version=${version}, kubernetes-version=${kubernetesVersion}, driver=${driver}, wait-for-ready=${waitForReady}, timeout=${timeout}s`);
+        // Step 0: Install prerequisites
+        await installPrerequisites();
         // Step 1: Install minikube binary
         await installMinikube(version);
         // Step 2: Start minikube cluster
@@ -25883,6 +25885,40 @@ async function main() {
     }
     catch (error) {
         throw error;
+    }
+}
+async function installPrerequisites() {
+    core.startGroup('Installing prerequisites');
+    try {
+        core.info('Checking and installing required packages...');
+        // Check if running on Linux
+        const platform = os.platform();
+        if (platform !== 'linux') {
+            core.info('  Not on Linux, skipping package installation');
+            return;
+        }
+        // Install conntrack (required by Minikube when using driver=none)
+        core.info('  Installing conntrack...');
+        const checkConntrack = await exec.exec('which', ['conntrack'], {
+            ignoreReturnCode: true,
+            silent: true
+        });
+        if (checkConntrack !== 0) {
+            core.info('  conntrack not found, installing...');
+            await exec.exec('sudo', ['apt-get', 'update', '-qq']);
+            await exec.exec('sudo', ['apt-get', 'install', '-y', '-qq', 'conntrack']);
+            core.info('  ✓ conntrack installed');
+        }
+        else {
+            core.info('  ✓ conntrack already installed');
+        }
+        core.info('✓ Prerequisites installed successfully');
+    }
+    catch (error) {
+        throw new Error(`Failed to install prerequisites: ${error}`);
+    }
+    finally {
+        core.endGroup();
     }
 }
 async function installMinikube(version) {
