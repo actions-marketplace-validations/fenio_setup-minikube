@@ -25975,6 +25975,10 @@ async function installPrerequisites() {
         }
         else {
             core.info('  ✓ Docker already installed');
+            // Even if Docker is already installed, we need to ensure socket permissions
+            // are correct for the current session to access it
+            await exec.exec('sudo', ['chmod', '666', '/var/run/docker.sock']);
+            core.info('  ✓ Docker socket permissions set');
         }
         // Install conntrack (required by Minikube when using driver=none)
         core.info('  Installing conntrack...');
