@@ -53,6 +53,56 @@ async function installPrerequisites(): Promise<void> {
       return;
     }
     
+    // Install Docker (required by Minikube even with driver=none)
+    core.info('  Checking Docker installation...');
+    const checkDocker = await exec.exec('which', ['docker'], { 
+      ignoreReturnCode: true,
+      silent: true 
+    });
+    
+    if (checkDocker !== 0) {
+      core.info('  Docker not found, installing...');
+      await exec.exec('sudo', ['apt-get', 'update', '-qq']);
+      
+      // Install prerequisites for Docker installation
+      await exec.exec('sudo', ['apt-get', 'install', '-y', '-qq', 
+        'ca-certificates', 'curl', 'gnupg', 'lsb-release']);
+      
+      // Add Docker's official GPG key
+      await exec.exec('sudo', ['install', '-m', '0755', '-d', '/etc/apt/keyrings']);
+      await exec.exec('bash', ['-c', 
+        'curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg']);
+      await exec.exec('sudo', ['chmod', 'a+r', '/etc/apt/keyrings/docker.gpg']);
+      
+      // Add Docker repository
+      await exec.exec('bash', ['-c',
+        'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null']);
+      
+      // Install Docker Engine
+      await exec.exec('sudo', ['apt-get', 'update', '-qq']);
+      await exec.exec('sudo', ['apt-get', 'install', '-y', '-qq', 
+        'docker-ce', 'docker-ce-cli', 'containerd.io']);
+      
+      // Start Docker service
+      await exec.exec('sudo', ['systemctl', 'start', 'docker']);
+      await exec.exec('sudo', ['systemctl', 'enable', 'docker']);
+      
+      // Add current user to docker group for non-root access
+      const userOutput: string[] = [];
+      await exec.exec('whoami', [], {
+        listeners: {
+          stdout: (data: Buffer) => userOutput.push(data.toString())
+        }
+      });
+      const currentUser = userOutput.join('').trim();
+      await exec.exec('sudo', ['usermod', '-aG', 'docker', currentUser]);
+      
+      core.info('  ✓ Docker installed and started');
+      core.saveState('dockerInstalled', 'true');
+    } else {
+      core.info('  ✓ Docker already installed');
+    }
+    
     // Install conntrack (required by Minikube when using driver=none)
     core.info('  Installing conntrack...');
     const checkConntrack = await exec.exec('which', ['conntrack'], { 

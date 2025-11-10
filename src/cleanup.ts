@@ -10,6 +10,9 @@ export async function cleanup(): Promise<void> {
     // Stop and delete Minikube cluster
     await deleteMinikube();
     
+    // Remove Docker if we installed it
+    await removeDockerIfInstalled();
+    
     core.info('✓ System state restored');
   } catch (error) {
     core.warning(`Cleanup encountered errors: ${error}`);
@@ -72,5 +75,47 @@ async function deleteMinikube(): Promise<void> {
     } else {
       core.info(`  Custom bin directory not empty or doesn't exist, leaving it`);
     }
+  }
+}
+
+async function removeDockerIfInstalled(): Promise<void> {
+  const dockerInstalled = core.getState('dockerInstalled');
+  
+  if (dockerInstalled !== 'true') {
+    core.info('  Docker was not installed by this action, skipping Docker cleanup');
+    return;
+  }
+  
+  core.info('  Docker was installed by this action, removing it...');
+  
+  try {
+    // Stop Docker service
+    core.info('  Stopping Docker service...');
+    await exec.exec('sudo', ['systemctl', 'stop', 'docker'], { ignoreReturnCode: true });
+    await exec.exec('sudo', ['systemctl', 'stop', 'docker.socket'], { ignoreReturnCode: true });
+    
+    // Remove Docker packages
+    core.info('  Removing Docker packages...');
+    await exec.exec('sudo', ['apt-get', 'purge', '-y', '-qq', 
+      'docker-ce', 'docker-ce-cli', 'containerd.io'], { ignoreReturnCode: true });
+    
+    // Remove Docker repository and GPG key
+    core.info('  Removing Docker repository...');
+    await exec.exec('sudo', ['rm', '-f', '/etc/apt/sources.list.d/docker.list'], { ignoreReturnCode: true });
+    await exec.exec('sudo', ['rm', '-f', '/etc/apt/keyrings/docker.gpg'], { ignoreReturnCode: true });
+    
+    // Remove Docker data directories
+    core.info('  Removing Docker data directories...');
+    await exec.exec('sudo', ['rm', '-rf', '/var/lib/docker'], { ignoreReturnCode: true });
+    await exec.exec('sudo', ['rm', '-rf', '/var/lib/containerd'], { ignoreReturnCode: true });
+    
+    // Clean up apt cache
+    await exec.exec('sudo', ['apt-get', 'autoremove', '-y', '-qq'], { ignoreReturnCode: true });
+    await exec.exec('sudo', ['apt-get', 'autoclean', '-qq'], { ignoreReturnCode: true });
+    
+    core.info('  ✓ Docker removed successfully');
+  } catch (error) {
+    core.warning(`Failed to remove Docker: ${error}`);
+    // Don't fail cleanup if Docker removal has issues
   }
 }

@@ -25691,6 +25691,8 @@ async function cleanup() {
         core.info('Starting cleanup...');
         // Stop and delete Minikube cluster
         await deleteMinikube();
+        // Remove Docker if we installed it
+        await removeDockerIfInstalled();
         core.info('✓ System state restored');
     }
     catch (error) {
@@ -25747,6 +25749,40 @@ async function deleteMinikube() {
         else {
             core.info(`  Custom bin directory not empty or doesn't exist, leaving it`);
         }
+    }
+}
+async function removeDockerIfInstalled() {
+    const dockerInstalled = core.getState('dockerInstalled');
+    if (dockerInstalled !== 'true') {
+        core.info('  Docker was not installed by this action, skipping Docker cleanup');
+        return;
+    }
+    core.info('  Docker was installed by this action, removing it...');
+    try {
+        // Stop Docker service
+        core.info('  Stopping Docker service...');
+        await exec.exec('sudo', ['systemctl', 'stop', 'docker'], { ignoreReturnCode: true });
+        await exec.exec('sudo', ['systemctl', 'stop', 'docker.socket'], { ignoreReturnCode: true });
+        // Remove Docker packages
+        core.info('  Removing Docker packages...');
+        await exec.exec('sudo', ['apt-get', 'purge', '-y', '-qq',
+            'docker-ce', 'docker-ce-cli', 'containerd.io'], { ignoreReturnCode: true });
+        // Remove Docker repository and GPG key
+        core.info('  Removing Docker repository...');
+        await exec.exec('sudo', ['rm', '-f', '/etc/apt/sources.list.d/docker.list'], { ignoreReturnCode: true });
+        await exec.exec('sudo', ['rm', '-f', '/etc/apt/keyrings/docker.gpg'], { ignoreReturnCode: true });
+        // Remove Docker data directories
+        core.info('  Removing Docker data directories...');
+        await exec.exec('sudo', ['rm', '-rf', '/var/lib/docker'], { ignoreReturnCode: true });
+        await exec.exec('sudo', ['rm', '-rf', '/var/lib/containerd'], { ignoreReturnCode: true });
+        // Clean up apt cache
+        await exec.exec('sudo', ['apt-get', 'autoremove', '-y', '-qq'], { ignoreReturnCode: true });
+        await exec.exec('sudo', ['apt-get', 'autoclean', '-qq'], { ignoreReturnCode: true });
+        core.info('  ✓ Docker removed successfully');
+    }
+    catch (error) {
+        core.warning(`Failed to remove Docker: ${error}`);
+        // Don't fail cleanup if Docker removal has issues
     }
 }
 
@@ -25896,6 +25932,48 @@ async function installPrerequisites() {
         if (platform !== 'linux') {
             core.info('  Not on Linux, skipping package installation');
             return;
+        }
+        // Install Docker (required by Minikube even with driver=none)
+        core.info('  Checking Docker installation...');
+        const checkDocker = await exec.exec('which', ['docker'], {
+            ignoreReturnCode: true,
+            silent: true
+        });
+        if (checkDocker !== 0) {
+            core.info('  Docker not found, installing...');
+            await exec.exec('sudo', ['apt-get', 'update', '-qq']);
+            // Install prerequisites for Docker installation
+            await exec.exec('sudo', ['apt-get', 'install', '-y', '-qq',
+                'ca-certificates', 'curl', 'gnupg', 'lsb-release']);
+            // Add Docker's official GPG key
+            await exec.exec('sudo', ['install', '-m', '0755', '-d', '/etc/apt/keyrings']);
+            await exec.exec('bash', ['-c',
+                'curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg']);
+            await exec.exec('sudo', ['chmod', 'a+r', '/etc/apt/keyrings/docker.gpg']);
+            // Add Docker repository
+            await exec.exec('bash', ['-c',
+                'echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null']);
+            // Install Docker Engine
+            await exec.exec('sudo', ['apt-get', 'update', '-qq']);
+            await exec.exec('sudo', ['apt-get', 'install', '-y', '-qq',
+                'docker-ce', 'docker-ce-cli', 'containerd.io']);
+            // Start Docker service
+            await exec.exec('sudo', ['systemctl', 'start', 'docker']);
+            await exec.exec('sudo', ['systemctl', 'enable', 'docker']);
+            // Add current user to docker group for non-root access
+            const userOutput = [];
+            await exec.exec('whoami', [], {
+                listeners: {
+                    stdout: (data) => userOutput.push(data.toString())
+                }
+            });
+            const currentUser = userOutput.join('').trim();
+            await exec.exec('sudo', ['usermod', '-aG', 'docker', currentUser]);
+            core.info('  ✓ Docker installed and started');
+            core.saveState('dockerInstalled', 'true');
+        }
+        else {
+            core.info('  ✓ Docker already installed');
         }
         // Install conntrack (required by Minikube when using driver=none)
         core.info('  Installing conntrack...');
