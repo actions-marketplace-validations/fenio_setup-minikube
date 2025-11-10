@@ -25708,24 +25708,17 @@ async function deleteMinikube() {
     // Retrieve custom minikube path from state
     const minikubePath = core.getState('minikubePath');
     const customBinDir = core.getState('customBinDir');
-    if (!minikubePath) {
-        core.info('  No custom minikube installation found, skipping cleanup');
-        return;
-    }
-    core.info(`  Custom minikube path: ${minikubePath}`);
-    // Check if minikube cluster exists
-    const statusResult = await exec.exec('minikube', ['status'], {
-        ignoreReturnCode: true,
-        silent: true
-    });
-    if (statusResult === 0) {
-        core.info('  Deleting Minikube cluster...');
-        await exec.exec('minikube', ['delete'], { ignoreReturnCode: true });
-        core.info('  Minikube cluster deleted');
+    if (minikubePath) {
+        core.info(`  Custom minikube path: ${minikubePath}`);
     }
     else {
-        core.info('  No Minikube cluster found');
+        core.info('  No custom minikube path saved in state (may be from previous run)');
     }
+    // ALWAYS try to delete minikube cluster, even if we don't have state
+    // This handles cleanup from previous failed runs or interrupted workflows
+    core.info('  Attempting to delete any existing Minikube cluster...');
+    await exec.exec('minikube', ['delete', '--all', '--purge'], { ignoreReturnCode: true });
+    core.info('  Minikube delete command completed');
     // Remove ~/.minikube directory to ensure complete cleanup
     core.info('  Removing ~/.minikube directory...');
     const homeDir = process.env.HOME || process.env.USERPROFILE || '~';
