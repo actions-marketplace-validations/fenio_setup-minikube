@@ -97,6 +97,10 @@ async function installPrerequisites(): Promise<void> {
       const currentUser = userOutput.join('').trim();
       await exec.exec('sudo', ['usermod', '-aG', 'docker', currentUser]);
       
+      // Change Docker socket permissions so current session can access it
+      // This is needed because group membership doesn't take effect until new login
+      await exec.exec('sudo', ['chmod', '666', '/var/run/docker.sock']);
+      
       core.info('  ✓ Docker installed and started');
       core.saveState('dockerInstalled', 'true');
     } else {
