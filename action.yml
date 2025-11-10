@@ -20,7 +20,7 @@ inputs:
   driver:
     description: 'Driver to use (docker, none, podman)'
     required: false
-    default: 'none'
+    default: 'docker'
   
   wait-for-ready:
     description: 'Wait for minikube cluster to be ready before completing'
