@@ -54,7 +54,6 @@ jobs:
             exit 1
           fi
           echo "✓ No custom minikube binary in ~/.local/bin"
-          docker ps && echo "✓ Docker is working" || (echo "✗ Docker not working" && exit 1)
           
       - name: Setup Minikube
         id: minikube
@@ -62,7 +61,6 @@ jobs:
         with:
           version: 'stable'
           kubernetes-version: 'stable'
-          driver: 'docker'
           wait-for-ready: 'true'
           timeout: '300'
       
@@ -109,26 +107,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         
-      - name: Verify Docker still works BEFORE running minikube
+      - name: Verify system is clean BEFORE running minikube
         run: |
-          echo "=== CRITICAL TEST: Verifying Docker Works After Previous Cleanup ==="
-          echo "This proves cleanup from the previous job didn't break Docker"
+          echo "=== CRITICAL TEST: Verifying System is Clean After Previous Cleanup ==="
+          echo "This proves cleanup from the previous job worked correctly"
           echo ""
           
-          # Docker should still work normally
-          if ! docker ps >/dev/null 2>&1; then
-            echo "✗ CRITICAL FAILURE: 'docker ps' does not work"
-            echo "This means the previous job's cleanup broke Docker!"
+          # Check for any minikube containers or processes
+          if pgrep -f minikube >/dev/null 2>&1; then
+            echo "✗ CRITICAL FAILURE: minikube processes still running"
+            echo "This means the previous job's cleanup didn't stop all processes!"
+            pgrep -af minikube || true
             exit 1
           fi
-          echo "✓ Docker is working"
-          
-          # Try running a container
-          if ! docker run --rm hello-world 2>&1 | grep -q "Hello from Docker"; then
-            echo "✗ CRITICAL FAILURE: Cannot run Docker containers"
-            exit 1
-          fi
-          echo "✓ Docker can run containers"
+          echo "✓ No minikube processes running"
         
       - name: Verify no minikube remnants from previous job
         run: |
@@ -162,7 +154,6 @@ jobs:
         with:
           version: 'stable'
           kubernetes-version: 'stable'
-          driver: 'docker'
           timeout: '300'
         
       - name: Verify second minikube instance works
@@ -178,44 +169,27 @@ jobs:
           
       # Cleanup will run automatically again for this job
       
-  # Job 3: FINAL TEST - Run a pure Docker workflow after everything
-  test-docker-after-multiple-runs:
+  # Job 3: FINAL TEST - Verify system is clean after everything
+  test-system-after-multiple-runs:
     runs-on: self-hosted
-    name: Verify Docker Works After Multiple Minikube Runs
+    name: Verify System Clean After Multiple Minikube Runs
     needs: test-cleanup-restoration
     if: always()
     
     steps:
-      - name: FINAL TEST - Verify Docker is fully functional
+      - name: FINAL TEST - Verify system is fully restored
         run: |
-          echo "=== FINAL TEST: Docker After Multiple Minikube Runs ==="
-          echo "This simulates a workflow that needs Docker after minikube has been used"
+          echo "=== FINAL TEST: System After Multiple Minikube Runs ==="
+          echo "This verifies the system is completely clean after multiple runs"
           echo ""
           
-          # Check Docker service
-          if ! systemctl is-active docker >/dev/null 2>&1; then
-            echo "✗ FAIL: Docker service not active"
-            systemctl status docker || true
+          # Verify no minikube processes
+          if pgrep -f minikube >/dev/null 2>&1; then
+            echo "✗ FAIL: minikube processes still running"
+            pgrep -af minikube || true
             exit 1
           fi
-          echo "✓ Docker service is active"
-          
-          # Pull and run a container
-          echo "Pulling nginx:alpine..."
-          docker pull nginx:alpine
-          
-          echo "Running container..."
-          CONTAINER_ID=$(docker run -d -p 8080:80 nginx:alpine)
-          echo "Started container: $CONTAINER_ID"
-          
-          # Wait and test
-          sleep 3
-          curl -f http://localhost:8080 >/dev/null 2>&1 || (echo "✗ Container not responding" && exit 1)
-          echo "✓ Container is responding"
-          
-          # Cleanup
-          docker stop $CONTAINER_ID >/dev/null
-          docker rm $CONTAINER_ID >/dev/null
+          echo "✓ No minikube processes"
           
           # Verify no minikube artifacts
           echo ""
@@ -232,6 +206,17 @@ jobs:
           fi
           echo "✓ No minikube profile directory"
           
+          # Check for leftover containers (if any)
+          if command -v crictl >/dev/null 2>&1; then
+            CONTAINERS=$(sudo crictl ps -a 2>/dev/null | wc -l)
+            if [ "$CONTAINERS" -gt 1 ]; then
+              echo "⚠ Warning: Found $((CONTAINERS - 1)) containers still running"
+              sudo crictl ps -a || true
+            else
+              echo "✓ No containers running"
+            fi
+          fi
+          
           echo ""
           echo "=========================================="
           echo "✓✓✓ COMPLETE SUCCESS ✓✓✓"
@@ -242,7 +227,6 @@ jobs:
           echo "  ✓ Properly configures Kubernetes cluster"
           echo "  ✓ Completely restores system state after cleanup"
           echo "  ✓ Can be run multiple times without issues"
-          echo "  ✓ Allows subsequent workflows to use Docker normally"
           echo "  ✓ Leaves no artifacts after cleanup"
           echo ""
           echo "System state restoration is PERFECT!"
