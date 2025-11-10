@@ -50,6 +50,12 @@ async function deleteMinikube(): Promise<void> {
     core.info('  No Minikube cluster found');
   }
   
+  // Remove ~/.minikube directory to ensure complete cleanup
+  core.info('  Removing ~/.minikube directory...');
+  const homeDir = process.env.HOME || process.env.USERPROFILE || '~';
+  await exec.exec('rm', ['-rf', `${homeDir}/.minikube`], { ignoreReturnCode: true });
+  core.info('  ~/.minikube directory removed');
+  
   // Remove CNI directories created by minikube
   core.info('  Removing CNI directories...');
   await exec.exec('sudo', ['rm', '-rf', '/etc/cni'], { ignoreReturnCode: true });
